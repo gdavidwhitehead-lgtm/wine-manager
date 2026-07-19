@@ -56,6 +56,7 @@ const els = {
   saveNote: document.querySelector("#saveNote"),
   authDialog: document.querySelector("#authDialog"),
   authForm: document.querySelector("#authForm"),
+  googleSignIn: document.querySelector("#googleSignIn"),
   closeAuthDialog: document.querySelector("#closeAuthDialog"),
   authNote: document.querySelector("#authNote"),
   detailDialog: document.querySelector("#detailDialog"),
@@ -840,6 +841,26 @@ async function handleSignInOut() {
   els.authDialog.showModal();
 }
 
+async function signInWithGoogle() {
+  if (!supabaseClient) {
+    window.alert("Supabase is not configured yet.");
+    return;
+  }
+  els.authNote.textContent = "Opening Google sign-in...";
+  const redirectTo = window.location.href.split("#")[0];
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      queryParams: {
+        access_type: "offline",
+        prompt: "select_account",
+      },
+    },
+  });
+  if (error) els.authNote.textContent = error.message;
+}
+
 async function sendSignInLink(event) {
   event.preventDefault();
   const email = els.authForm.elements.email.value.trim();
@@ -875,6 +896,7 @@ els.import.addEventListener("change", importData);
 els.form.addEventListener("submit", saveWine);
 els.closeDialog.addEventListener("click", () => els.dialog.close());
 els.deleteWine.addEventListener("click", deleteCurrentWine);
+els.googleSignIn.addEventListener("click", signInWithGoogle);
 els.authForm.addEventListener("submit", sendSignInLink);
 els.closeAuthDialog.addEventListener("click", () => els.authDialog.close());
 els.closeDetailDialog.addEventListener("click", () => els.detailDialog.close());

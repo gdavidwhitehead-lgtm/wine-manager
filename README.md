@@ -38,6 +38,28 @@ window.WINE_MANAGER_CONFIG = {
 
 The anon key is intended for browser apps. Row-level security in `supabase-schema.sql` limits each signed-in user to their own wines.
 
+## Google Login Setup
+
+The app supports Google OAuth to avoid Supabase's built-in email rate limits.
+
+In Supabase:
+
+1. Go to **Authentication > Sign In / Providers**.
+2. Enable **Google**.
+3. Add the Google OAuth Client ID and Client Secret.
+4. Keep your GitHub Pages URL in **Authentication > URL Configuration** as the Site URL and an allowed redirect URL.
+
+In Google Cloud Console:
+
+1. Create or open an OAuth client for a web application.
+2. Add this authorized redirect URI:
+
+```text
+https://unzeynqyzofpgsdjhgen.supabase.co/auth/v1/callback
+```
+
+After that, use **Cloud Sync > Continue with Google** in the dashboard.
+
 ## AI Research Backend
 
 The dashboard includes a Supabase Edge Function at `supabase/functions/research-wine/index.ts`. It calls the OpenAI Responses API with web search enabled, returns structured research, and stores the result in the `wine_research` table.

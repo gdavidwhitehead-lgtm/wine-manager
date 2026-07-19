@@ -580,22 +580,13 @@ async function runAiResearch(wine) {
   }
 
   try {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.access_token) throw new Error("Sign in again before running AI research.");
-    const response = await fetch(`${config.supabaseUrl}/functions/v1/${researchFunctionName}`, {
-      method: "POST",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ wine }),
+    const { data, error } = await supabaseClient.functions.invoke(researchFunctionName, {
+      body: { wine },
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Research request failed.");
-    researchCache[wine.id] = payload.research;
+    if (error) throw error;
+    if (data?.error) throw new Error(data.detail || data.error);
+    if (!data?.research) throw new Error("The research service returned no research.");
+    researchCache[wine.id] = data.research;
     persistResearchCache();
     openWineDetails(wine);
   } catch (error) {

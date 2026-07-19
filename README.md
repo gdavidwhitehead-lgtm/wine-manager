@@ -82,6 +82,8 @@ supabase functions deploy research-wine
 
 After deployment, sign in with **Cloud Sync**, click a wine, then use **Research with AI** in the wine detail popup.
 
+If the browser reports `AI research failed: Load failed`, redeploy the latest dashboard and Edge Function. The app calls the function through the Supabase client so auth headers and function routing are handled by Supabase.
+
 ## How Saving Works
 
 - Before Supabase is configured, edits save locally in the browser.

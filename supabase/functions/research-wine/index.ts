@@ -55,6 +55,30 @@ function parseResearch(text: string) {
   }
 }
 
+function parseOpenAiError(detail: string) {
+  try {
+    const payload = JSON.parse(detail);
+    const error = payload?.error;
+    if (error?.code === "insufficient_quota") {
+      return {
+        error: "OpenAI quota is unavailable.",
+        detail: "Add billing or available credits to the OpenAI project for the API key, then try AI research again.",
+        code: error.code,
+      };
+    }
+    if (error?.message) {
+      return {
+        error: "OpenAI research request failed.",
+        detail: error.message,
+        code: error.code || error.type || null,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -131,7 +155,10 @@ Return only valid JSON with this shape:
 
   if (!aiResponse.ok) {
     const detail = await aiResponse.text();
-    return jsonResponse({ error: "OpenAI research request failed.", detail }, 502);
+    return jsonResponse(
+      parseOpenAiError(detail) || { error: "OpenAI research request failed.", detail },
+      502,
+    );
   }
 
   const aiJson = await aiResponse.json();

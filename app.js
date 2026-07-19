@@ -590,13 +590,28 @@ async function runAiResearch(wine) {
     persistResearchCache();
     openWineDetails(wine);
   } catch (error) {
-    window.alert(`AI research failed: ${error.message}`);
+    window.alert(`AI research failed: ${await getFunctionErrorMessage(error)}`);
   } finally {
     if (button) {
       button.disabled = false;
       button.textContent = researchCache[wine.id] ? "Refresh Research" : "Research with AI";
     }
   }
+}
+
+async function getFunctionErrorMessage(error) {
+  const fallback = error?.message || "Research request failed.";
+  const response = error?.context;
+  if (!response?.json) return fallback;
+
+  try {
+    const payload = await response.json();
+    if (payload?.detail) return `${payload.error || fallback}: ${payload.detail}`;
+    if (payload?.error) return payload.error;
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 
 function openWineForm(wine) {

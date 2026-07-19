@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wine Manager</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Cellar Dashboard</p>
+          <h1>Wine Manager</h1>
+        </div>
+        <div class="topbar-actions" aria-label="Dashboard summary">
+          <span id="lastUpdated">Excel import</span>
+          <button id="addWine" type="button">Add Wine</button>
+          <button id="signInOut" type="button" class="secondary">Cloud Sync</button>
+          <button id="exportData" type="button" class="secondary">Export</button>
+          <label class="import-button">
+            Import
+            <input id="importData" type="file" accept=".js,.json,application/json">
+          </label>
+          <button id="resetFilters" type="button">Reset</button>
+        </div>
+      </header>
+
+      <section class="filters" aria-label="Collection filters">
+        <label>
+          Search
+          <input id="searchInput" type="search" placeholder="Winery, wine, varietal, notes">
+        </label>
+        <label>
+          Color
+          <select id="colorFilter"></select>
+        </label>
+        <label>
+          Cellaring
+          <select id="statusFilter"></select>
+        </label>
+        <label>
+          Region
+          <select id="regionFilter"></select>
+        </label>
+        <label>
+          Sort
+          <select id="sortSelect">
+            <option value="drink">Drink priority</option>
+            <option value="quantity">Bottle count</option>
+            <option value="rating">Collection rating</option>
+            <option value="vintage">Vintage</option>
+            <option value="winery">Winery</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="metrics" aria-label="Collection metrics">
+        <article>
+          <span>Total Bottles</span>
+          <strong id="totalBottles">0</strong>
+        </article>
+        <article>
+          <span>Unique Wines</span>
+          <strong id="uniqueWines">0</strong>
+        </article>
+        <article>
+          <span>Drink Now</span>
+          <strong id="drinkNow">0</strong>
+        </article>
+        <article>
+          <span>Hold</span>
+          <strong id="holdBottles">0</strong>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel cellar-balance">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Composition</p>
+              <h2>Color Balance</h2>
+            </div>
+            <span id="redWhiteSplit"></span>
+          </div>
+          <div class="bottle-visual" aria-hidden="true">
+            <div class="bottle-neck"></div>
+            <div class="bottle-body">
+              <div id="whiteFill" class="white-fill"></div>
+              <div id="redFill" class="red-fill"></div>
+            </div>
+          </div>
+          <div id="colorLegend" class="legend"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Planning</p>
+              <h2>Cellaring Status</h2>
+            </div>
+          </div>
+          <div id="statusBars" class="bars"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h2>Top Regions</h2>
+            </div>
+          </div>
+          <div id="regionBars" class="bars"></div>
+        </article>
+      </section>
+
+      <section class="split-section">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Open Soon</p>
+              <h2>Drink Priority</h2>
+            </div>
+          </div>
+          <div id="priorityList" class="priority-list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Replenish</p>
+              <h2>Low Bottle Counts</h2>
+            </div>
+          </div>
+          <div id="lowStockList" class="priority-list"></div>
+        </article>
+      </section>
+
+      <section class="table-section">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Browse</p>
+            <h2>Collection</h2>
+          </div>
+          <span id="resultCount"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Wine</th>
+                <th>Vintage</th>
+                <th>Varietal</th>
+                <th>Region</th>
+                <th>Status</th>
+                <th>Window</th>
+                <th>Rating</th>
+                <th>Qty</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="wineRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="wineDialog">
+      <form id="wineForm" method="dialog">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow" id="formMode">Inventory</p>
+            <h2 id="formTitle">Add Wine</h2>
+          </div>
+          <button id="closeDialog" type="button" class="icon-button" aria-label="Close">×</button>
+        </div>
+
+        <input id="wineId" type="hidden" name="id">
+        <div class="form-grid">
+          <label>
+            Winery
+            <input name="winery" required>
+          </label>
+          <label>
+            Wine
+            <input name="wine" required>
+          </label>
+          <label>
+            Vintage
+            <input name="vintage" inputmode="numeric" placeholder="NV">
+          </label>
+          <label>
+            Quantity
+            <input name="quantity" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            Color
+            <select name="color">
+              <option>Red</option>
+              <option>White</option>
+              <option>Rosé</option>
+              <option>Sparkling</option>
+              <option>Dessert</option>
+              <option>Unknown</option>
+            </select>
+          </label>
+          <label>
+            Varietal
+            <input name="varietal">
+          </label>
+          <label>
+            Region
+            <input name="region">
+          </label>
+          <label>
+            Country
+            <input name="country">
+          </label>
+          <label>
+            Collection Rating
+            <select name="collection_rating">
+              <option>★★★★★</option>
+              <option>★★★★☆</option>
+              <option>★★★☆☆</option>
+              <option>★★☆☆☆</option>
+              <option>★☆☆☆☆</option>
+              <option>Not rated</option>
+            </select>
+          </label>
+          <label>
+            Professional Score
+            <input name="professional_score" placeholder="N/R">
+          </label>
+          <label>
+            Drink From
+            <input name="drink_from" type="number" min="1900" max="2200" step="1">
+          </label>
+          <label>
+            Drink Through
+            <input name="drink_through" type="number" min="1900" max="2200" step="1">
+          </label>
+          <label>
+            Cellaring Status
+            <select name="cellaring_status">
+              <option>Drink Now</option>
+              <option>Drink / Short Hold</option>
+              <option>Drink / Hold</option>
+              <option>Hold</option>
+              <option>Long-Term Hold</option>
+            </select>
+          </label>
+          <label>
+            Critic / Publication
+            <input name="critic_publication" placeholder="—">
+          </label>
+          <label class="wide">
+            Score Source URL
+            <input name="score_source_url" type="url">
+          </label>
+          <label class="wide">
+            Notes
+            <textarea name="notes" rows="4"></textarea>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="deleteWine" type="button" class="danger">Delete</button>
+          <span id="saveNote">Saved in this browser</span>
+          <button id="saveWine" type="submit">Save Wine</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="authDialog">
+      <form id="authForm" method="dialog">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Cloud Sync</p>
+            <h2>Sign In</h2>
+          </div>
+          <button id="closeAuthDialog" type="button" class="icon-button" aria-label="Close">×</button>
+        </div>
+        <p class="dialog-copy">Enter your email to get a secure sign-in link. After signing in, edits sync to your cloud inventory.</p>
+        <label>
+          Email
+          <input name="email" type="email" autocomplete="email" required>
+        </label>
+        <div class="modal-actions">
+          <span id="authNote">Uses Supabase Auth</span>
+          <button type="submit">Send Link</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="data/wines.js"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

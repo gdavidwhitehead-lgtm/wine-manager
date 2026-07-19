@@ -1,9 +1,13 @@
 const STORAGE_KEY = "wine-manager-inventory-v1";
+const RESEARCH_CACHE_KEY = "wine-manager-research-v1";
 const DATA_VERSION = 1;
 const config = window.WINE_MANAGER_CONFIG || {};
+const researchData = window.WINE_RESEARCH || { winery: {}, wines: {} };
 const tableName = config.tableName || "wines";
+const researchFunctionName = config.researchFunctionName || "research-wine";
 const baseWines = (window.WINE_DATA || []).map(normalizeWine);
 let wines = loadSavedWines();
+let researchCache = loadResearchCache();
 let supabaseClient = null;
 let currentUser = null;
 let syncMode = "local";
@@ -54,6 +58,11 @@ const els = {
   authForm: document.querySelector("#authForm"),
   closeAuthDialog: document.querySelector("#closeAuthDialog"),
   authNote: document.querySelector("#authNote"),
+  detailDialog: document.querySelector("#detailDialog"),
+  detailTitle: document.querySelector("#detailTitle"),
+  detailKicker: document.querySelector("#detailKicker"),
+  detailContent: document.querySelector("#detailContent"),
+  closeDetailDialog: document.querySelector("#closeDetailDialog"),
 };
 
 const currentYear = new Date().getFullYear();
@@ -109,6 +118,27 @@ function loadSavedWines() {
   return baseWines;
 }
 
+function loadResearchCache() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RESEARCH_CACHE_KEY) || "null");
+    return saved?.version === DATA_VERSION && saved.research ? saved.research : {};
+  } catch {
+    localStorage.removeItem(RESEARCH_CACHE_KEY);
+    return {};
+  }
+}
+
+function persistResearchCache() {
+  localStorage.setItem(
+    RESEARCH_CACHE_KEY,
+    JSON.stringify({
+      version: DATA_VERSION,
+      savedAt: new Date().toISOString(),
+      research: researchCache,
+    }),
+  );
+}
+
 function persistWines() {
   localStorage.setItem(
     STORAGE_KEY,
@@ -149,6 +179,26 @@ function escapeHtml(value) {
       "'": "&#039;",
     }[char];
   });
+}
+
+function searchUrl(query) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function wineResearchKey(wine) {
+  return [wine.winery, wine.wine, wine.vintage || ""]
+    .map((part) => String(part || "").trim().toLowerCase())
+    .join("|");
+}
+
+function getResearch(wine) {
+  const wineMatch = researchData.wines?.[wineResearchKey(wine)];
+  const wineryMatch = researchData.winery?.[wine.winery];
+  return {
+    ai: researchCache[wine.id] || null,
+    wine: wineMatch || null,
+    winery: wineryMatch || null,
+  };
 }
 
 function uniqueValues(key) {
@@ -279,8 +329,10 @@ function renderTable(rows) {
   els.wineRows.replaceChildren(
     ...rows.map((wine) => {
       const tr = document.createElement("tr");
+      tr.className = "clickable-row";
+      tr.dataset.detailId = wine.id;
       tr.innerHTML = `
-        <td><strong>${escapeHtml(wine.winery)}</strong><br>${escapeHtml(wine.wine)}</td>
+        <td><button type="button" class="wine-link" data-detail-id="${wine.id}"><strong>${escapeHtml(wine.winery)}</strong><br>${escapeHtml(wine.wine)}</button></td>
         <td>${wine.vintage || "NV"}</td>
         <td>${escapeHtml(wine.varietal || "Unknown")}</td>
         <td>${escapeHtml(wine.region || "Unknown")}</td>
@@ -340,6 +392,219 @@ function syncState() {
   state.region = els.region.value;
   state.sort = els.sort.value;
   render();
+}
+
+function detailItem(label, value) {
+  return `
+    <div class="detail-item">
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value || "—")}</dd>
+    </div>
+  `;
+}
+
+function renderSourceLinks(sources = []) {
+  if (!sources.length) return `<p class="muted-copy">No verified source link attached yet.</p>`;
+  return `
+    <div class="source-links">
+      ${sources
+        .map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener">${escapeHtml(source.label)}</a>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function normalizeResearchSource(source) {
+  if (!source) return null;
+  if (typeof source === "string") return { label: source, url: source };
+  return {
+    label: source.label || source.title || source.url || "Source",
+    url: source.url || "",
+  };
+}
+
+function renderApiResearch(research) {
+  if (!research) {
+    return `
+      <section class="detail-section ai-research-panel">
+        <div class="detail-section-heading">
+          <h3>AI Web Research</h3>
+          <button type="button" class="secondary" data-run-research>Research with AI</button>
+        </div>
+        <p class="muted-copy">Sign in and run an AI web research pass for producer notes, tasting context, pairings, storage notes, and source links.</p>
+      </section>
+    `;
+  }
+
+  const listSections = [
+    ["Tasting Notes", research.tasting_notes],
+    ["Producer Notes", research.producer_notes],
+    ["Pairings", research.pairing_ideas],
+    ["Buying / Storage", research.buying_storage_notes],
+  ];
+  const sources = (research.sources || []).map(normalizeResearchSource).filter((source) => source?.url);
+
+  return `
+    <section class="detail-section ai-research-panel">
+      <div class="detail-section-heading">
+        <h3>AI Web Research</h3>
+        <button type="button" class="secondary" data-run-research>Refresh Research</button>
+      </div>
+      <p>${escapeHtml(research.summary || "No summary returned.")}</p>
+      ${listSections
+        .map(([title, items]) =>
+          items?.length
+            ? `<h4>${escapeHtml(title)}</h4><ul class="research-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+            : "",
+        )
+        .join("")}
+      <p class="muted-copy">Confidence: ${escapeHtml(research.confidence || "Not specified")}${research.researched_at ? ` · ${escapeHtml(new Date(research.researched_at).toLocaleString())}` : ""}</p>
+      ${renderSourceLinks(sources)}
+    </section>
+  `;
+}
+
+function renderResearchBlock(title, research) {
+  if (!research) {
+    return `
+      <section class="detail-section">
+        <h3>${escapeHtml(title)}</h3>
+        <p class="muted-copy">No verified research note is attached yet.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="detail-section">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(research.summary)}</p>
+      <ul class="research-list">
+        ${(research.details || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+      ${renderSourceLinks(research.sources)}
+    </section>
+  `;
+}
+
+function openWineDetails(wine) {
+  const research = getResearch(wine);
+  const wineName = `${wine.winery} ${wine.wine}`.trim();
+  const vintage = wine.vintage || "NV";
+  const wineQuery = `${vintage} ${wine.winery} ${wine.wine} ${wine.varietal || ""} wine`;
+  const scoreQuery = `${vintage} ${wine.winery} ${wine.wine} wine score tasting notes`;
+  const producerQuery = `${wine.winery} winery ${wine.region || ""}`;
+
+  els.detailKicker.textContent = `${wine.color || "Wine"} · ${wine.quantity || 0} bottle${wine.quantity === 1 ? "" : "s"}`;
+  els.detailTitle.textContent = `${vintage} ${wineName}`;
+  els.detailDialog.dataset.wineId = wine.id;
+  els.detailContent.innerHTML = `
+    <section class="detail-hero">
+      <div>
+        <p class="eyebrow">${escapeHtml(wine.cellaring_status || "Cellaring")}</p>
+        <h3>${escapeHtml(wine.varietal || "Unknown varietal")}</h3>
+        <p>${escapeHtml(wine.region || "Unknown region")}${wine.country ? `, ${escapeHtml(wine.country)}` : ""}</p>
+      </div>
+      <div class="detail-rating">
+        <span>${escapeHtml(wine.collection_rating || "Not rated")}</span>
+        <strong>${escapeHtml(wine.professional_score || "N/R")}</strong>
+      </div>
+    </section>
+
+    <section class="detail-section">
+      <h3>Inventory Details</h3>
+      <dl class="detail-list">
+        ${detailItem("Winery", wine.winery)}
+        ${detailItem("Wine", wine.wine)}
+        ${detailItem("Vintage", vintage)}
+        ${detailItem("Color", wine.color)}
+        ${detailItem("Varietal", wine.varietal)}
+        ${detailItem("Region", wine.region)}
+        ${detailItem("Country", wine.country)}
+        ${detailItem("Quantity", wine.quantity)}
+        ${detailItem("Drink Window", `${wine.drink_from || "?"}-${wine.drink_through || "?"}`)}
+        ${detailItem("Cellaring Status", wine.cellaring_status)}
+        ${detailItem("Collection Rating", wine.collection_rating)}
+        ${detailItem("Professional Score", wine.professional_score)}
+        ${detailItem("Critic / Publication", wine.critic_publication)}
+      </dl>
+    </section>
+
+    <section class="detail-section">
+      <h3>Cellar Notes</h3>
+      <p>${escapeHtml(wine.notes || "No cellar notes yet.")}</p>
+      ${wine.score_source_url ? renderSourceLinks([{ label: "Score Source", url: wine.score_source_url }]) : ""}
+    </section>
+
+    ${renderApiResearch(research.ai)}
+    ${renderResearchBlock("AI Research: This Wine", research.wine)}
+    ${renderResearchBlock("AI Research: Producer", research.winery)}
+
+    <section class="detail-section">
+      <h3>Search More</h3>
+      <div class="source-links">
+        <a href="${searchUrl(wineQuery)}" target="_blank" rel="noopener">Wine Search</a>
+        <a href="${searchUrl(scoreQuery)}" target="_blank" rel="noopener">Scores & Tasting Notes</a>
+        <a href="${searchUrl(producerQuery)}" target="_blank" rel="noopener">Producer</a>
+        <a href="${searchUrl(`${wine.varietal || wine.wine} food pairing wine`)}" target="_blank" rel="noopener">Pairings</a>
+      </div>
+    </section>
+
+    <div class="detail-actions">
+      <button type="button" class="secondary" data-detail-edit-id="${wine.id}">Edit Inventory</button>
+    </div>
+  `;
+  if (!els.detailDialog.open) els.detailDialog.showModal();
+}
+
+async function loadCloudResearch() {
+  if (!supabaseClient || !currentUser) return;
+  const { data, error } = await supabaseClient.from("wine_research").select("wine_id,research");
+  if (error) return;
+  data.forEach((row) => {
+    researchCache[row.wine_id] = row.research;
+  });
+  persistResearchCache();
+}
+
+async function runAiResearch(wine) {
+  if (!supabaseClient || !currentUser) {
+    window.alert("Sign in with Cloud Sync before running AI research.");
+    return;
+  }
+
+  const button = els.detailContent.querySelector("[data-run-research]");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Researching...";
+  }
+
+  try {
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (!session?.access_token) throw new Error("Sign in again before running AI research.");
+    const response = await fetch(`${config.supabaseUrl}/functions/v1/${researchFunctionName}`, {
+      method: "POST",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ wine }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Research request failed.");
+    researchCache[wine.id] = payload.research;
+    persistResearchCache();
+    openWineDetails(wine);
+  } catch (error) {
+    window.alert(`AI research failed: ${error.message}`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = researchCache[wine.id] ? "Refresh Research" : "Research with AI";
+    }
+  }
 }
 
 function openWineForm(wine) {
@@ -550,6 +815,7 @@ async function refreshSession() {
   if (currentUser) {
     try {
       await loadCloudInventory();
+      await loadCloudResearch();
     } catch (loadError) {
       syncMode = "signed-out";
       updateSourceLabel();
@@ -611,11 +877,35 @@ els.closeDialog.addEventListener("click", () => els.dialog.close());
 els.deleteWine.addEventListener("click", deleteCurrentWine);
 els.authForm.addEventListener("submit", sendSignInLink);
 els.closeAuthDialog.addEventListener("click", () => els.authDialog.close());
-els.wineRows.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-edit-id]");
+els.closeDetailDialog.addEventListener("click", () => els.detailDialog.close());
+els.detailContent.addEventListener("click", (event) => {
+  const researchButton = event.target.closest("[data-run-research]");
+  if (researchButton) {
+    const wineId = els.detailDialog.dataset.wineId;
+    const wine = wines.find((item) => item.id === wineId);
+    if (wine) runAiResearch(wine);
+    return;
+  }
+
+  const button = event.target.closest("[data-detail-edit-id]");
   if (!button) return;
-  const wine = wines.find((item) => item.id === button.dataset.editId);
-  if (wine) openWineForm(wine);
+  const wine = wines.find((item) => item.id === button.dataset.detailEditId);
+  if (!wine) return;
+  els.detailDialog.close();
+  openWineForm(wine);
+});
+els.wineRows.addEventListener("click", (event) => {
+  const editButton = event.target.closest("[data-edit-id]");
+  if (editButton) {
+    const wine = wines.find((item) => item.id === editButton.dataset.editId);
+    if (wine) openWineForm(wine);
+    return;
+  }
+
+  const detailTarget = event.target.closest("[data-detail-id]");
+  if (!detailTarget) return;
+  const wine = wines.find((item) => item.id === detailTarget.dataset.detailId);
+  if (wine) openWineDetails(wine);
 });
 
 configureSupabase();

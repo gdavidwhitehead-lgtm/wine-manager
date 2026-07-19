@@ -54,3 +54,46 @@ to authenticated
 using (auth.uid() = user_id);
 
 create index if not exists wines_user_id_idx on public.wines(user_id);
+
+create table if not exists public.wine_research (
+  wine_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  research jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (wine_id, user_id)
+);
+
+alter table public.wine_research enable row level security;
+
+drop policy if exists "Users can read their own wine research" on public.wine_research;
+drop policy if exists "Users can add their own wine research" on public.wine_research;
+drop policy if exists "Users can update their own wine research" on public.wine_research;
+drop policy if exists "Users can delete their own wine research" on public.wine_research;
+
+create policy "Users can read their own wine research"
+on public.wine_research
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can add their own wine research"
+on public.wine_research
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own wine research"
+on public.wine_research
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own wine research"
+on public.wine_research
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+create index if not exists wine_research_user_id_idx on public.wine_research(user_id);

@@ -38,6 +38,28 @@ window.WINE_MANAGER_CONFIG = {
 
 The anon key is intended for browser apps. Row-level security in `supabase-schema.sql` limits each signed-in user to their own wines.
 
+## AI Research Backend
+
+The dashboard includes a Supabase Edge Function at `supabase/functions/research-wine/index.ts`. It calls the OpenAI Responses API with web search enabled, returns structured research, and stores the result in the `wine_research` table.
+
+Setup:
+
+1. Re-run `supabase-schema.sql` in the Supabase SQL editor to add the `wine_research` table.
+2. Install the Supabase CLI if needed.
+3. Link this repo to your Supabase project.
+4. Set the OpenAI key as a Supabase secret.
+5. Deploy the function.
+
+Commands:
+
+```bash
+supabase link --project-ref unzeynqyzofpgsdjhgen
+supabase secrets set OPENAI_API_KEY=your-openai-api-key
+supabase functions deploy research-wine
+```
+
+After deployment, sign in with **Cloud Sync**, click a wine, then use **Research with AI** in the wine detail popup.
+
 ## How Saving Works
 
 - Before Supabase is configured, edits save locally in the browser.

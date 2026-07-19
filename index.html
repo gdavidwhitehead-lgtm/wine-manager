@@ -292,8 +292,22 @@
       </form>
     </dialog>
 
+    <dialog id="detailDialog" class="detail-dialog">
+      <div class="detail-shell">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow" id="detailKicker">Wine Details</p>
+            <h2 id="detailTitle">Wine</h2>
+          </div>
+          <button id="closeDetailDialog" type="button" class="icon-button" aria-label="Close">×</button>
+        </div>
+        <div id="detailContent"></div>
+      </div>
+    </dialog>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="data/wines.js"></script>
+    <script src="data/wine-research.js"></script>
     <script src="config.js"></script>
     <script src="app.js"></script>
   </body>

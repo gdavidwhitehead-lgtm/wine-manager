@@ -633,6 +633,13 @@ dialog::backdrop {
   background: #fff9fb;
 }
 
+.wiens-aging-panel {
+  padding: 16px;
+  border: 1px solid #d7dfd9;
+  border-radius: 8px;
+  background: #f7fbf8;
+}
+
 .detail-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -658,6 +665,11 @@ dialog::backdrop {
 .detail-item dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.compact-detail-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
 }
 
 .research-list {

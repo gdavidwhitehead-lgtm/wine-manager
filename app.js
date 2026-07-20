@@ -3,6 +3,7 @@ const RESEARCH_CACHE_KEY = "wine-manager-research-v1";
 const DATA_VERSION = 1;
 const config = window.WINE_MANAGER_CONFIG || {};
 const researchData = window.WINE_RESEARCH || { winery: {}, wines: {} };
+const wiensAgingChart = window.WIENS_AGING_CHART || { rules: [] };
 const tableName = config.tableName || "wines";
 const researchFunctionName = config.researchFunctionName || "research-wine";
 const baseWines = (window.WINE_DATA || []).map(normalizeWine);
@@ -202,8 +203,95 @@ function getResearch(wine) {
   };
 }
 
+function normalizeMatchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isWiensWine(wine) {
+  return normalizeMatchText(wine.winery).includes("wiens");
+}
+
+function getWiensAgingRule(wine) {
+  if (!isWiensWine(wine)) return null;
+  const haystack = normalizeMatchText(`${wine.wine} ${wine.varietal}`);
+  const candidates = wiensAgingChart.rules || [];
+
+  const ranked = candidates
+    .map((rule) => {
+      const names = [rule.name, ...(rule.aliases || [])];
+      const matchedName = names.find((name) => haystack.includes(normalizeMatchText(name)));
+      if (!matchedName) return null;
+      const score = normalizeMatchText(matchedName).length;
+      return { ...rule, matchedName, score };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0] || null;
+}
+
+function getWiensDrinkability(wine) {
+  const rule = getWiensAgingRule(wine);
+  const vintage = toOptionalNumber(wine.vintage);
+  if (!rule || !vintage) return null;
+
+  const startYear = vintage + rule.startPeak;
+  const endYear = vintage + rule.endPeak;
+  let status = "Peak Now";
+  let guidance = "This bottle is in Wiens Cellars' published peak drinkability window.";
+  if (currentYear < startYear) {
+    status = "Hold";
+    guidance = `Hold until ${startYear} for the start of Wiens Cellars' peak window.`;
+  } else if (currentYear > endYear) {
+    status = "Past Peak";
+    guidance = "Wiens Cellars' published peak window has passed; consider opening soon and expect maturity.";
+  }
+
+  return {
+    ...rule,
+    vintage,
+    startYear,
+    endYear,
+    status,
+    guidance,
+  };
+}
+
+function displayDrinkWindow(wine) {
+  const wiens = getWiensDrinkability(wine);
+  if (wiens) return `${wiens.startYear}-${wiens.endYear}`;
+  return `${wine.drink_from || "?"}-${wine.drink_through || "?"}`;
+}
+
+function displayCellaringStatus(wine) {
+  const wiens = getWiensDrinkability(wine);
+  if (wiens) return wiens.status;
+  return wine.cellaring_status || "Unsorted";
+}
+
+function applyWiensAgingDefaults(wine) {
+  const wiens = getWiensDrinkability(wine);
+  if (!wiens) return wine;
+  return {
+    ...wine,
+    drink_from: wiens.startYear,
+    drink_through: wiens.endYear,
+  };
+}
+
 function uniqueValues(key) {
   return [...new Set(wines.map((wine) => wine[key]).filter(Boolean))].sort((a, b) =>
+    String(a).localeCompare(String(b)),
+  );
+}
+
+function uniqueStatusValues() {
+  return [...new Set(wines.map(displayCellaringStatus).filter(Boolean))].sort((a, b) =>
     String(a).localeCompare(String(b)),
   );
 }
@@ -218,7 +306,7 @@ function fillSelect(select, values, currentValue = "All") {
 
 function refreshFilterOptions() {
   fillSelect(els.color, uniqueValues("color"), state.color);
-  fillSelect(els.status, uniqueValues("cellaring_status"), state.status);
+  fillSelect(els.status, uniqueStatusValues(), state.status);
   fillSelect(els.region, uniqueValues("region"), state.region);
   state.color = els.color.value;
   state.status = els.status.value;
@@ -242,6 +330,11 @@ function starScore(rating) {
 }
 
 function drinkPriority(wine) {
+  const wiens = getWiensDrinkability(wine);
+  if (wiens?.status === "Past Peak") return 95 + starScore(wine.collection_rating);
+  if (wiens?.status === "Peak Now") return 80 + starScore(wine.collection_rating);
+  if (wiens?.status === "Hold") return 15 + starScore(wine.collection_rating);
+
   const status = wine.cellaring_status || "";
   let score = 0;
   if (status.includes("Drink Now")) score += 60;
@@ -269,7 +362,7 @@ function filteredWines() {
     return (
       (!query || haystack.includes(query)) &&
       (state.color === "All" || wine.color === state.color) &&
-      (state.status === "All" || wine.cellaring_status === state.status) &&
+      (state.status === "All" || displayCellaringStatus(wine) === state.status) &&
       (state.region === "All" || wine.region === state.region)
     );
   });
@@ -312,7 +405,7 @@ function renderWineList(container, rows, options = {}) {
     item.innerHTML = `
       <div>
         <div class="wine-title">${escapeHtml(wine.winery)} ${escapeHtml(wine.wine)}</div>
-        <div class="wine-meta">${wine.vintage || "NV"} · ${escapeHtml(wine.varietal || "Unknown")} · ${wine.drink_from || "?"}-${wine.drink_through || "?"}</div>
+        <div class="wine-meta">${wine.vintage || "NV"} · ${escapeHtml(wine.varietal || "Unknown")} · ${displayDrinkWindow(wine)}</div>
       </div>
       <span class="pill">${wine.quantity} bottle${wine.quantity === 1 ? "" : "s"}</span>
     `;
@@ -337,8 +430,8 @@ function renderTable(rows) {
         <td>${wine.vintage || "NV"}</td>
         <td>${escapeHtml(wine.varietal || "Unknown")}</td>
         <td>${escapeHtml(wine.region || "Unknown")}</td>
-        <td class="status">${escapeHtml(wine.cellaring_status || "Unsorted")}</td>
-        <td>${wine.drink_from || "?"}-${wine.drink_through || "?"}</td>
+        <td class="status">${escapeHtml(displayCellaringStatus(wine))}</td>
+        <td>${displayDrinkWindow(wine)}</td>
         <td>${escapeHtml(wine.collection_rating || "Not rated")}</td>
         <td>${wine.quantity || 0}</td>
         <td><button type="button" class="table-action" data-edit-id="${wine.id}">Edit</button></td>
@@ -352,7 +445,11 @@ function render() {
   refreshFilterOptions();
   const rows = sortedRows(filteredWines());
   const total = bottleCount(rows);
-  const statusGroups = groupByBottleCount(rows, "cellaring_status");
+  const statusGroups = rows.reduce((groups, wine) => {
+    const label = displayCellaringStatus(wine);
+    groups[label] = (groups[label] || 0) + Number(wine.quantity || 0);
+    return groups;
+  }, {});
   const colorGroups = groupByBottleCount(rows, "color");
 
   els.totalBottles.textContent = total;
@@ -465,6 +562,36 @@ function renderApiResearch(research) {
   `;
 }
 
+function renderWiensAgingBlock(wine) {
+  const wiens = getWiensDrinkability(wine);
+  if (!isWiensWine(wine)) return "";
+  if (!wiens) {
+    return `
+      <section class="detail-section wiens-aging-panel">
+        <h3>Wiens Aging Chart</h3>
+        <p class="muted-copy">This is a Wiens wine, but it did not match a varietal or blend in the imported Wiens vintage aging chart. Add a closer varietal or wine name to use the chart.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="detail-section wiens-aging-panel">
+      <div class="detail-section-heading">
+        <h3>Wiens Aging Chart</h3>
+        <span class="pill">${escapeHtml(wiens.status)}</span>
+      </div>
+      <dl class="detail-list compact-detail-list">
+        ${detailItem("Chart Match", wiens.name)}
+        ${detailItem("Category", wiens.category)}
+        ${detailItem("Start Peak", `Vintage + ${wiens.startPeak} = ${wiens.startYear}`)}
+        ${detailItem("End Peak", `Vintage + ${wiens.endPeak} = ${wiens.endYear}`)}
+      </dl>
+      <p>${escapeHtml(wiens.guidance)}</p>
+      <p class="muted-copy">Source: Wiens Cellars Vintage Aging Chart PDF. Start peak is the first year of peak drinkability; end peak is the last year.</p>
+    </section>
+  `;
+}
+
 function renderResearchBlock(title, research) {
   if (!research) {
     return `
@@ -501,7 +628,7 @@ function openWineDetails(wine) {
   els.detailContent.innerHTML = `
     <section class="detail-hero">
       <div>
-        <p class="eyebrow">${escapeHtml(wine.cellaring_status || "Cellaring")}</p>
+        <p class="eyebrow">${escapeHtml(displayCellaringStatus(wine))}</p>
         <h3>${escapeHtml(wine.varietal || "Unknown varietal")}</h3>
         <p>${escapeHtml(wine.region || "Unknown region")}${wine.country ? `, ${escapeHtml(wine.country)}` : ""}</p>
       </div>
@@ -522,8 +649,8 @@ function openWineDetails(wine) {
         ${detailItem("Region", wine.region)}
         ${detailItem("Country", wine.country)}
         ${detailItem("Quantity", wine.quantity)}
-        ${detailItem("Drink Window", `${wine.drink_from || "?"}-${wine.drink_through || "?"}`)}
-        ${detailItem("Cellaring Status", wine.cellaring_status)}
+        ${detailItem("Drink Window", displayDrinkWindow(wine))}
+        ${detailItem("Cellaring Status", displayCellaringStatus(wine))}
         ${detailItem("Collection Rating", wine.collection_rating)}
         ${detailItem("Professional Score", wine.professional_score)}
         ${detailItem("Critic / Publication", wine.critic_publication)}
@@ -536,6 +663,7 @@ function openWineDetails(wine) {
       ${wine.score_source_url ? renderSourceLinks([{ label: "Score Source", url: wine.score_source_url }]) : ""}
     </section>
 
+    ${renderWiensAgingBlock(wine)}
     ${renderApiResearch(research.ai)}
     ${renderResearchBlock("AI Research: This Wine", research.wine)}
     ${renderResearchBlock("AI Research: Producer", research.winery)}
@@ -651,14 +779,14 @@ function openWineForm(wine) {
 
 function wineFromForm() {
   const data = Object.fromEntries(new FormData(els.form).entries());
-  return normalizeWine({
+  return applyWiensAgingDefaults(normalizeWine({
     ...data,
     id: data.id || makeId(),
     vintage: toOptionalNumber(data.vintage),
     quantity: toOptionalNumber(data.quantity),
     drink_from: toOptionalNumber(data.drink_from),
     drink_through: toOptionalNumber(data.drink_through),
-  });
+  }));
 }
 
 function toCloudRow(wine) {

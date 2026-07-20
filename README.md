@@ -15,6 +15,7 @@ Open `index.html` in a browser to use the dashboard. The data export lives in `d
 - Add, edit, and delete wines directly in the browser
 - Supabase cloud sync for GitHub Pages hosting
 - Local browser persistence and import/export backup
+- Wiens Cellars drinkability guidance from the Wiens Vintage Aging Chart
 
 ## Cloud Sync Setup
 
@@ -83,6 +84,18 @@ supabase functions deploy research-wine
 After deployment, sign in with **Cloud Sync**, click a wine, then use **Research with AI** in the wine detail popup.
 
 If the browser reports `AI research failed: Load failed`, redeploy the latest dashboard and Edge Function. The app calls the function through the Supabase client so auth headers and function routing are handled by Supabase.
+
+## Wiens Aging Chart
+
+The app loads `data/wiens-aging.js`, which was transcribed from `Wiens-Cellars_Vintage-Aging-Chart.pdf`.
+
+For wines where the winery includes `Wiens`, the dashboard tries to match the wine name and varietal to the chart. When matched, the app calculates:
+
+- Start peak year: `vintage + start peak`
+- End peak year: `vintage + end peak`
+- Drinkability: `Hold`, `Peak Now`, or `Past Peak`
+
+This is computed live, so future Wiens wines added through the dashboard get the same chart-based drinkability guidance when their name or varietal matches the chart.
 
 ## How Saving Works
 
